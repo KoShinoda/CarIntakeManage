@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>一般修理管理表</title>
+  <style>
+    :root {
+      --ink: #1a2330;
+      --muted: #5d6b7a;
+      --line: #d5dee8;
+      --header: #14324f;
+      --head-row: #1d4468;
+      --today: #fff6d8;
+      --today-mark: #d89a12;
+      --alt: #f4f7fb;
+      --sat: #1a5ea8;
+      --sun: #c0392b;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #f2f5f8;
+      color: var(--ink);
+      font-family: "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+    }
+
+    .app {
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .top {
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      padding: 18px 22px 16px;
+      background: var(--header);
+      color: #fff;
+      border-bottom: 5px solid var(--today-mark);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 3.4vh, 46px);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      line-height: 1.1;
+    }
+
+    .sub {
+      margin: 6px 0 0;
+      font-size: clamp(16px, 1.8vh, 24px);
+      letter-spacing: 0.12em;
+      opacity: 0.86;
+    }
+
+    .meta {
+      text-align: right;
+      line-height: 1.2;
+    }
+
+    #clock {
+      font-size: clamp(26px, 3.2vh, 42px);
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #status {
+      display: block;
+      margin-top: 4px;
+      font-size: clamp(13px, 1.5vh, 18px);
+      font-weight: 500;
+      opacity: 0.82;
+    }
+
+    #status.is-error { color: #ffd0d0; opacity: 1; }
+
+    .table {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+    }
+
+    .head, .row {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1.45fr) minmax(132px, 0.95fr);
+      grid-template-areas:
+        "date user car"
+        "work work note";
+      column-gap: clamp(8px, 1vw, 16px);
+      row-gap: 4px;
+      align-items: center;
+    }
+
+    body.is-dense .top {
+      padding: 8px 16px 8px;
+    }
+
+    body.is-dense h1 { font-size: 28px; }
+    body.is-dense .sub { display: none; }
+    body.is-dense #clock { font-size: 24px; }
+    body.is-dense #status { margin-top: 0; font-size: 14px; }
+
+    body.is-dense .head,
+    body.is-dense .row {
+      grid-template-columns: 148px minmax(0, 1.15fr) minmax(96px, 0.78fr) minmax(0, 2.5fr) minmax(108px, 1fr);
+      grid-template-areas: "date user car work note";
+      row-gap: 0;
+    }
+
+    .date { grid-area: date; }
+    .user { grid-area: user; }
+    .car { grid-area: car; }
+    .work { grid-area: work; }
+    .note { grid-area: note; }
+
+    .head > div, .row > div { min-width: 0; }
+
+    .head {
+      flex: 0 0 auto;
+      padding: 10px 18px 12px;
+      background: var(--head-row);
+      color: #fff;
+      font-size: clamp(15px, 1.7vh, 22px);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    body.is-dense .head {
+      padding: 6px 14px;
+      font-size: 16px;
+    }
+
+    .rows {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .row {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: hidden;
+      container-type: size;
+      padding: 8px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+
+    body.is-dense .row { padding: 0 14px; }
+
+    .row:nth-child(even) { background: var(--alt); }
+
+    .row.is-today {
+      background: var(--today);
+      box-shadow: inset 7px 0 0 var(--today-mark);
+    }
+
+    .date, .car, .note { text-align: center; }
+    .user, .work { text-align: left; }
+
+    .row .date {
+      font-size: clamp(18px, 24cqh, 36px);
+      font-weight: 700;
+      line-height: 1.05;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .weekday {
+      margin-top: 4px;
+      font-size: clamp(12px, 14cqh, 20px);
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    body.is-dense .row .date > div { display: inline; }
+    body.is-dense .weekday { margin: 0 0 0 4px; font-size: 0.82em; }
+
+    .weekday.sat { color: var(--sat); }
+    .weekday.sun { color: var(--sun); }
+
+    .row .user, .row .car {
+      font-size: clamp(16px, 20cqh, 30px);
+      font-weight: 700;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .row .work, .row .note {
+      font-size: clamp(14px, 16cqh, 26px);
+      font-weight: 500;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+
+    body.is-dense .row .date,
+    body.is-dense .row .user,
+    body.is-dense .row .car,
+    body.is-dense .row .work,
+    body.is-dense .row .note {
+      font-size: clamp(16px, 46cqh, 26px);
+      line-height: 1.15;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .note { color: #243444; }
+
+    .empty {
+      margin: auto;
+      padding: 24px;
+      color: var(--muted);
+      font-size: clamp(20px, 2.4vh, 32px);
+    }
+
+    .rows::-webkit-scrollbar { width: 10px; }
+    .rows::-webkit-scrollbar-thumb {
+      background: #c3ced8;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div>
+        <h1 id="title">一般修理管理表</h1>
+        <p class="sub">予定表</p>
+      </div>
+      <div class="meta">
+        <div id="clock">--:--</div>
+        <small id="status">読み込み中</small>
+      </div>
+    </header>
+    <div class="table" role="table" aria-label="予定表">
+      <div class="head" role="row">
+        <div class="date" role="columnheader">日付</div>
+        <div class="user" role="columnheader">ユーザー名</div>
+        <div class="car" role="columnheader">車番</div>
+        <div class="work" role="columnheader">修理内容</div>
+        <div class="note" role="columnheader">備考</div>
+      </div>
+      <div class="rows" id="rows" role="rowgroup"></div>
+    </div>
+  </div>
+  <script>
+    var hasData = false;
+    var loading = false;
+
+    function pad(number) {
+      return (number < 10 ? '0' : '') + number;
+    }
+
+    function tick() {
+      var now = new Date();
+      var weekday = '日月火水木金土'.charAt(now.getDay());
+      document.getElementById('clock').textContent =
+        (now.getMonth() + 1) + '/' + now.getDate() + '（' + weekday + '） ' +
+        pad(now.getHours()) + ':' + pad(now.getMinutes());
+    }
+
+    function textCell(text, className) {
+      var el = document.createElement('div');
+      el.className = className;
+      el.setAttribute('role', 'cell');
+      el.textContent = text || '';
+      return el;
+    }
+
+    function dateCell(row) {
+      var el = document.createElement('div');
+      el.className = 'date';
+      el.setAttribute('role', 'cell');
+      var main = document.createElement('div');
+      main.textContent = row.date || '—';
+      el.appendChild(main);
+      if (row.weekday) {
+        var sub = document.createElement('div');
+        sub.className = 'weekday' + (row.weekdayKind ? ' ' + row.weekdayKind : '');
+        sub.textContent = '（' + row.weekday + '）';
+        el.appendChild(sub);
+      }
+      return el;
+    }
+
+    function render(data) {
+      hasData = true;
+      document.getElementById('title').textContent = data.title || '一般修理管理表';
+      var status = document.getElementById('status');
+      status.classList.remove('is-error');
+      status.textContent = data.count + '件　更新 ' + data.updated;
+      var rows = document.getElementById('rows');
+      document.body.classList.toggle('is-dense', data.rows.length > 15);
+      rows.replaceChildren();
+      if (!data.rows.length) {
+        var empty = document.createElement('p');
+        empty.className = 'empty';
+        empty.textContent = '表示する予定はありません';
+        rows.appendChild(empty);
+        return;
+      }
+      data.rows.forEach(function (row) {
+        var el = document.createElement('div');
+        el.className = 'row' + (row.isToday ? ' is-today' : '');
+        el.setAttribute('role', 'row');
+        el.appendChild(dateCell(row));
+        el.appendChild(textCell(row.user, 'user'));
+        el.appendChild(textCell(row.car, 'car'));
+        el.appendChild(textCell(row.work, 'work'));
+        el.appendChild(textCell(row.note, 'note'));
+        rows.appendChild(el);
+      });
+    }
+
+    function showError(err) {
+      var status = document.getElementById('status');
+      status.classList.add('is-error');
+      status.textContent = hasData ? '更新失敗。直前の表示を継続中' : '読み込みに失敗しました';
+      if (!hasData) {
+        var rows = document.getElementById('rows');
+        rows.replaceChildren();
+        var empty = document.createElement('p');
+        empty.className = 'empty';
+        empty.textContent = (err && err.message) ? err.message : '予定表を取得できません';
+        rows.appendChild(empty);
+      }
+    }
+
+    function refresh() {
+      if (loading || !window.google || !google.script || !google.script.run) return;
+      loading = true;
+      google.script.run
+        .withSuccessHandler(function (data) {
+          loading = false;
+          render(data);
+        })
+        .withFailureHandler(function (err) {
+          loading = false;
+          showError(err);
+        })
+        .getBoardData();
+    }
+
+    tick();
+    setInterval(tick, 1000);
+    refresh();
+    setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) refresh();
+    });
+  </script>
+</body>
+</html>
