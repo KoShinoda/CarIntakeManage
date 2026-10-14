@@ -27,11 +27,32 @@ $urls = @{
   general = 'https://script.google.com/macros/s/AKfycbwskwjtX9e6CjmhP6tgMUuWNLWKbVAEb55EL_QnW7CsEkiVh9aipEt4BjMAXi0heTWhdQ/exec'
 }
 
-# 普段使いの Chrome と分けるため、表示専用のプロファイルを使う
+# 普段使いのブラウザと分けるため、表示専用のプロファイルを使う
 $profileName = 'RepairBoardChrome'
 $profileDir = Join-Path $env:LOCALAPPDATA $profileName
+$logPath = Join-Path $PSScriptRoot '実行ログ.txt'
+
+function Write-BoardLog {
+  param([string]$Message)
+  $line = '{0}  {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message
+  Add-Content -LiteralPath $logPath -Value $line -Encoding UTF8
+}
 
 Add-Type -AssemblyName System.Windows.Forms
+
+# バッチやショートカットからはウィンドウなしで動くので、失敗したらログとダイアログで知らせる
+$ErrorActionPreference = 'Stop'
+trap {
+  $text = $_.Exception.Message
+  try { Write-BoardLog "エラー: $text" } catch { }
+  [System.Windows.Forms.MessageBox]::Show(
+    "予定表ディスプレイでエラーが発生しました。`n`n$text`n`n詳しくは $logPath",
+    '予定表ディスプレイ', 'OK', 'Error') | Out-Null
+  exit 1
+}
+
+Write-BoardLog ('開始 App={0} Setup={1} Install={2} Remove={3} Monitor={4} User={5}' -f $App, $Setup, $Install, $Remove, $Monitor, $env:USERNAME)
+
 $screens = [System.Windows.Forms.Screen]::AllScreens
 
 function Get-TargetScreen {
@@ -52,10 +73,33 @@ function Show-Screens {
   }
 }
 
-function Stop-BoardChrome {
-  Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" |
+function Stop-BoardBrowser {
+  Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe' OR Name = 'msedge.exe'" |
     Where-Object { $_.CommandLine -like "*$profileName*" } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+}
+
+# Chrome を優先し、無ければ Edge を使う
+function Find-Browser {
+  $candidates = @(
+    "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+    "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+    "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+  )
+  foreach ($key in @(
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe',
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe'
+  )) {
+    $item = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+    if ($item -and $item.'(default)') { $candidates += $item.'(default)' }
+  }
+  $candidates += @(
+    "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
+    "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
+  )
+  $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
 }
 
 function Get-Links {
@@ -93,29 +137,28 @@ if ($Install) {
   ''
   'モニター一覧'
   Show-Screens
+  Write-BoardLog '登録しました'
   return
 }
 
 if ($Remove) {
   Get-Links | ForEach-Object { Remove-Item $_.Path -ErrorAction SilentlyContinue }
-  Stop-BoardChrome
+  Stop-BoardBrowser
   Start-Sleep -Seconds 2
   Remove-Item -Recurse -Force $profileDir -ErrorAction SilentlyContinue
   '登録を解除しました'
-  '  ショートカット3つと、表示専用の Chrome プロファイルを消しました'
+  '  ショートカット3つと、表示専用のブラウザのプロファイルを消しました'
+  Write-BoardLog '解除しました'
   return
 }
 
 $target = Get-TargetScreen
 
-$chrome = @(
-  "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-  "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
-  "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $chrome) { throw 'Google Chrome が見つかりません' }
+$browser = Find-Browser
+if (-not $browser) { throw 'Google Chrome も Microsoft Edge も見つかりません。どちらかをインストールしてください。' }
+Write-BoardLog "ブラウザ: $browser"
 
-Stop-BoardChrome
+Stop-BoardBrowser
 
 if (-not $Setup) {
   # 起動直後はネットワークがまだ無いことがあるので、最大2分待つ
@@ -129,7 +172,7 @@ if (-not $Setup) {
   }
 }
 
-$chromeArgs = @(
+$browserArgs = @(
   "--user-data-dir=`"$profileDir`"",
   '--no-first-run',
   '--no-default-browser-check',
@@ -139,9 +182,10 @@ $chromeArgs = @(
 )
 
 if ($Setup) {
-  $chromeArgs += @('--new-window', $urls[$App])
+  $browserArgs += @('--new-window', $urls[$App])
 } else {
-  $chromeArgs += @('--kiosk', $urls[$App])
+  $browserArgs += @('--kiosk', $urls[$App])
 }
 
-Start-Process -FilePath $chrome -ArgumentList $chromeArgs
+Start-Process -FilePath $browser -ArgumentList $browserArgs
+Write-BoardLog ('起動しました Setup={0} URL={1}' -f $Setup, $urls[$App])
